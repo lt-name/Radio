@@ -1,3 +1,5 @@
+自用的修改版，可能并不适用于其他服务器！  
+
 # Radio
 
 Radio plugin for Nukkit
