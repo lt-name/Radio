@@ -3,11 +3,13 @@ package cn.wode490390.nukkit.radio;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.player.PlayerQuitEvent;
+import cn.nukkit.event.player.PlayerTeleportEvent;
 import cn.nukkit.event.server.DataPacketReceiveEvent;
 import cn.nukkit.network.protocol.SetLocalPlayerAsInitializedPacket;
 import cn.nukkit.plugin.PluginBase;
 import cn.nukkit.resourcepacks.ResourcePack;
 import cn.nukkit.resourcepacks.ResourcePackManager;
+import cn.nukkit.scheduler.Task;
 import cn.nukkit.utils.Config;
 import cn.wode490390.nukkit.radio.command.RadioAdminCommand;
 import cn.wode490390.nukkit.radio.command.RadioCommand;
@@ -24,12 +26,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+
 import org.jaudiotagger.audio.ogg.util.OggInfoReader;
 
 public class RadioPlugin extends PluginBase implements Listener {
@@ -131,7 +130,14 @@ public class RadioPlugin extends PluginBase implements Listener {
     @EventHandler
     public void onDataPacketReceive(DataPacketReceiveEvent event) {
         if (event.getPacket() instanceof SetLocalPlayerAsInitializedPacket && this.autoplay) {
-            this.global.addListener(event.getPlayer());
+            this.global.addListener(event.getPlayer(), null);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        if (!event.getFrom().getLevel().getName().equals(event.getTo().getLevel().getName())) {
+            this.global.addListener(event.getPlayer(), event.getTo().getLevel());
         }
     }
 

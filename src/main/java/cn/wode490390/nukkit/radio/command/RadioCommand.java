@@ -51,7 +51,7 @@ public class RadioCommand extends Command implements PluginIdentifiableCommand {
             Player player = (Player) sender;
             switch (args[0].toLowerCase()) {
                 case "play":
-                    global.addListener(player);
+                    global.addListener(player, null);
                     break;
                 case "stop":
                     global.removeListener(player);

@@ -2,27 +2,22 @@ package cn.wode490390.nukkit.radio;
 
 import cn.nukkit.Player;
 import cn.nukkit.Server;
+import cn.nukkit.level.Level;
 import cn.nukkit.network.protocol.PlaySoundPacket;
 import cn.nukkit.network.protocol.StopSoundPacket;
 import cn.nukkit.utils.TextFormat;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
+
+import java.util.*;
 
 public class Radio implements IRadio {
 
     private byte mode = MODE_ORDER;
     private final List<IMusic> playlist = new ObjectArrayList<>();
 
-    private final Set<Player> listeners = Sets.newHashSet();
-    private IMusic playing;
-    private int index = 0;
-    private static final Timer timer = new Timer("Radio Timer", true);
-    private TimerTask updater;
+    private final HashMap<Player, IMusic> playings = new HashMap<>();
+    private final HashMap<Player, Timer> timers = new HashMap<>();
 
     @Override
     public byte getMode() {
@@ -44,60 +39,64 @@ public class Radio implements IRadio {
         this.playlist.add(music);
     }
 
-    @Override
-    public void next() {
-        this.next(false);
+    public synchronized void next(Player player) {
+        this.next(player, null);
     }
 
-    public synchronized void next(boolean force) {
-        if (this.listeners.isEmpty() && !force) {
-            this.playing = null;
-            return;
+    @Override
+    public synchronized void next(Player player, Level level) {
+        if (level == null) {
+            level = player.getLevel();
         }
-        Player[] players = this.listeners.toArray(new Player[0]);
-
-        switch (this.mode) {
-            case MODE_RANDOM:
-                this.index = RadioPlugin.getRNG().nextInt(this.playlist.size());
-                break;
-            case MODE_ORDER:
-            default:
-                if (++this.index >= this.playlist.size()) {
-                    this.index = 0;
-                }
-                break;
+        IMusic newIMusic = null;
+        if (this.playings.containsKey(player)) {
+            stop(null, player);
+            newIMusic = getIMusic(this.playings.get(player), level);
         }
-        this.playing = this.playlist.get(this.index);
-
-        stop(null, players);
-        play(this.playing, players);
-
-        this.updater = new TimerTask() {
+        if (newIMusic == null) {
+            newIMusic = getIMusic(null, level);
+        }
+        if (newIMusic == null) {
+            newIMusic = this.playlist.get(RadioPlugin.getRNG().nextInt(this.playlist.size()));
+        }
+        if (newIMusic == null) return;
+        this.playings.put(player, newIMusic);
+        play(newIMusic, player);
+        TimerTask updater = new TimerTask() {
             @Override
             public void run() {
-                Radio.this.next();
+                Radio.this.next(player);
             }
         };
-        timer.schedule(this.updater, this.playing.getDuration());
+        if (this.timers.containsKey(player)) {
+            this.timers.get(player).cancel();
+        }
+        this.timers.put(player, new Timer("Radio " + player.getName(), true));
+        this.timers.get(player).schedule(updater, newIMusic.getDuration());
+    }
+
+    private IMusic getIMusic(IMusic iMusic, Level level) {
+        for (IMusic newIMusic : this.playlist) {
+            if (iMusic != null && iMusic.getMD5().equals(newIMusic.getMD5())) {
+                continue;
+            }
+            String[] s = newIMusic.getName().split("]");
+            if (s.length > 0 &&
+                    s[0].replace("[", "").trim().equals(level.getName())) {
+                return newIMusic;
+            }
+        }
+        return null;
     }
 
     @Override
-    public void addListener(Player player) {
-        if (this.listeners.add(player)) {
-            if (this.playing == null) {
-                this.next();
-            } else {
-                stop(null, player);
-                play(this.playing, player);
-            }
-        }
+    public void addListener(Player player, Level level) {
+        this.next(player, level);
     }
 
     @Override
     public void removeListener(Player player) {
-        if (this.listeners.remove(player)) {
-            stop(null, player);
-        }
+        stop(null, player);
     }
 
     @Override
@@ -144,4 +143,5 @@ public class Radio implements IRadio {
             Server.broadcastPacket(players, pk);
         }
     }
+
 }
