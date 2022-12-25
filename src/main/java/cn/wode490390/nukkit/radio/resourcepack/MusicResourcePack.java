@@ -127,6 +127,11 @@ public class MusicResourcePack implements ResourcePack {
     }
 
     @Override
+    public String getEncryptionKey() {
+        return "";
+    }
+
+    @Override
     public String toString() {
         return "MusicResourcePack(" + this.uuid + ")";
     }
