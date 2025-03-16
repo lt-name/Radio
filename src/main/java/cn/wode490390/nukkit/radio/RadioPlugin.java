@@ -19,6 +19,7 @@ import cn.nukkit.utils.Config;
 import cn.wode490390.nukkit.radio.command.RadioAdminCommand;
 import cn.wode490390.nukkit.radio.command.RadioCommand;
 import cn.wode490390.nukkit.radio.resourcepack.MusicResourcePack;
+import cn.wode490390.nukkit.radio.resourcepack.MusicResourcePackLoader;
 import cn.wode490390.nukkit.radio.util.MetricsLite;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -113,21 +114,11 @@ public class RadioPlugin extends PluginBase implements Listener {
             playlist.forEach(music -> joiner.add(music.getName()));
             this.getLogger().info(joiner.toString());
 
+            MusicResourcePackLoader musicResourcePackLoader = new MusicResourcePackLoader(packs);
             ResourcePackManager manager = this.getServer().getResourcePackManager();
             synchronized (manager) {
-                try {
-                    Field f1 = ResourcePackManager.class.getDeclaredField("resourcePacksById");
-                    f1.setAccessible(true);
-                    Map<UUID, ResourcePack> byId = (Map<UUID, ResourcePack>) f1.get(manager);
-                    packs.forEach(pack -> byId.put(pack.getPackId(), pack));
-
-                    Field f2 = ResourcePackManager.class.getDeclaredField("resourcePacks");
-                    f2.setAccessible(true);
-                    packs.addAll(Arrays.asList((ResourcePack[]) f2.get(manager)));
-                    f2.set(manager, packs.toArray(new ResourcePack[0]));
-                } catch (NoSuchFieldException | IllegalAccessException e) {
-                    throw new RuntimeException(e);
-                }
+                manager.registerPackLoader(musicResourcePackLoader);
+                manager.reloadPacks();
             }
 
             this.getServer().getPluginManager().registerEvents(this, this);
