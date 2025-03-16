@@ -3,6 +3,7 @@ package cn.wode490390.nukkit.radio;
 import cn.nukkit.Player;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
+import cn.nukkit.event.entity.EntityLevelChangeEvent;
 import cn.nukkit.event.player.PlayerFormRespondedEvent;
 import cn.nukkit.event.player.PlayerLocallyInitializedEvent;
 import cn.nukkit.event.player.PlayerQuitEvent;
@@ -31,16 +32,12 @@ import org.jaudiotagger.audio.ogg.util.OggInfoReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class RadioPlugin extends PluginBase implements Listener {
 
@@ -50,6 +47,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     private boolean showNotification = true;
 
     private final IRadio global = new Radio();
+    private final Map<String, IRadio> worldRadios = new HashMap<>();
 
     private final Long2IntMap uiWindows = new Long2IntOpenHashMap();
 
@@ -105,8 +103,8 @@ public class RadioPlugin extends PluginBase implements Listener {
 
         HashFunction hasher = Hashing.md5();
         List<ResourcePack> packs = new ObjectArrayList<>();
-        try {
-            Files.walk(musicPath, 1).filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && path.toString().toLowerCase().endsWith(".ogg")).forEach(path -> {
+        try (Stream<Path> stream = Files.walk(musicPath, 1)) {
+            stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && path.toString().toLowerCase().endsWith(".ogg")).forEach(path -> {
                 try (InputStream fis = Files.newInputStream(path, StandardOpenOption.READ)) {
                     byte[] bytes = new byte[fis.available()];
                     fis.read(bytes);
@@ -119,6 +117,35 @@ public class RadioPlugin extends PluginBase implements Listener {
                     packs.add(new MusicResourcePack(md5, bytes));
                     this.global.addMusic(music);
                 } catch (Exception ignore) {
+
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        try (Stream<Path> stream = Files.walk(musicPath, 1)) {
+            stream.filter(dirPath -> Files.isDirectory(dirPath, LinkOption.NOFOLLOW_LINKS)).forEach(rootPath -> {
+                String fileName = rootPath.getFileName().toString();
+                IRadio iRadio = this.worldRadios.computeIfAbsent(fileName, s -> new Radio());
+                try (Stream<Path> dirStream = Files.walk(rootPath, 1)) {
+                    dirStream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && path.toString().toLowerCase().endsWith(".ogg")).forEach(path -> {
+                        try (InputStream fis = Files.newInputStream(path, StandardOpenOption.READ)) {
+                            byte[] bytes = new byte[fis.available()];
+                            fis.read(bytes);
+
+                            String md5 = hasher.hashBytes(bytes).toString();
+                            double seconds = new OggInfoReader().read(new RandomAccessFile(path.toFile(), "r")).getPreciseTrackLength();
+                            String name = path.getFileName().toString();
+                            IMusic music = new Music(md5, (long) Math.ceil(seconds * 1000), name.substring(0, name.length() - 4));
+
+                            packs.add(new MusicResourcePack(md5, bytes));
+                            iRadio.addMusic(music);
+                        } catch (Exception ignore) {
+
+                        }
+                    });
+                } catch (Exception ignored) {
 
                 }
             });
@@ -153,7 +180,30 @@ public class RadioPlugin extends PluginBase implements Listener {
     @EventHandler
     public void onPlayerLocallyInitialized(PlayerLocallyInitializedEvent event) {
         if (this.autoplay) {
-            this.global.addListener(event.getPlayer());
+            final Player player = event.getPlayer();
+            this.getServer().getScheduler().scheduleDelayedTask(() -> {
+                if (this.worldRadios.containsKey(player.getLevel().getName())) {
+                    this.worldRadios.get(player.getLevel().getName()).addListener(player);
+                } else {
+                    this.global.addListener(event.getPlayer());
+                }
+            }, 10);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerLevelChange(EntityLevelChangeEvent event) {
+        if (event.getEntity() instanceof Player) {
+            Player player = (Player) event.getEntity();
+            if (this.worldRadios.containsKey(event.getOrigin().getName())) {
+                this.worldRadios.get(event.getOrigin().getName()).removeListener(player);
+            }
+            if (this.worldRadios.containsKey(event.getTarget().getName())) {
+                this.global.removeListener(player);
+                this.worldRadios.get(event.getTarget().getName()).addListener(player);
+            } else if (!this.global.isListened(player) ) {
+                this.global.addListener(player);
+            }
         }
     }
 
@@ -161,6 +211,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         this.global.removeListener(player);
+        this.worldRadios.values().forEach(radio -> radio.removeListener(player));
         this.uiWindows.remove(player.getId());
     }
 
@@ -203,6 +254,10 @@ public class RadioPlugin extends PluginBase implements Listener {
 
     public IRadio getGlobal() {
         return this.global;
+    }
+
+    public IRadio getWorldRadio(String world) {
+        return this.worldRadios.get(world);
     }
 
     private void logConfigException(String node, Throwable t) {
