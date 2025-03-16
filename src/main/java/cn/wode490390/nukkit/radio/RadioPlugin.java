@@ -44,11 +44,23 @@ import java.util.UUID;
 
 public class RadioPlugin extends PluginBase implements Listener {
 
+    private static RadioPlugin instance;
+
     private boolean autoplay = true;
+    private boolean showNotification = true;
 
     private final IRadio global = new Radio();
 
     private final Long2IntMap uiWindows = new Long2IntOpenHashMap();
+
+    public static RadioPlugin getInstance() {
+        return instance;
+    }
+
+    @Override
+    public void onLoad() {
+        instance = this;
+    }
 
     @Override
     public void onEnable() {
@@ -71,6 +83,12 @@ public class RadioPlugin extends PluginBase implements Listener {
             if (config.getString(node).trim().equalsIgnoreCase("random")) {
                 this.global.setMode(IRadio.MODE_RANDOM);
             }
+        } catch (Exception e) {
+            this.logConfigException(node, e);
+        }
+        node = "show-notification";
+        try {
+            this.showNotification = config.getBoolean(node, this.showNotification);
         } catch (Exception e) {
             this.logConfigException(node, e);
         }
@@ -126,6 +144,10 @@ public class RadioPlugin extends PluginBase implements Listener {
 
         this.getServer().getCommandMap().register("radio", new RadioCommand(this));
         this.getServer().getCommandMap().register("radio", new RadioAdminCommand(this));
+    }
+
+    public boolean isShowNotification() {
+        return this.showNotification;
     }
 
     @EventHandler

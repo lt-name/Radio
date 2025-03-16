@@ -138,7 +138,9 @@ public class Radio implements IRadio {
             pk.y = player.getFloorY();
             pk.z = player.getFloorZ();
             player.dataPacket(pk);
-            player.sendActionBar(message, 20, 60, 20);
+            if (RadioPlugin.getInstance().isShowNotification()) {
+                player.sendActionBar(message, 20, 60, 20);
+            }
         }
     }
 

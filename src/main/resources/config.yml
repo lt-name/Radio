@@ -4,3 +4,6 @@ autoplay: true
 
 # Allowed values: "order" or "random"
 play-mode: random
+
+# Show music name when playing begins
+show-notification: true
