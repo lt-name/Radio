@@ -49,6 +49,8 @@ public class RadioPlugin extends PluginBase implements Listener {
     private final IRadio global = new Radio();
     private final Map<String, IRadio> worldRadios = new HashMap<>();
 
+    private final Map<Player, Boolean> playSetting = new HashMap<>();
+
     private final Long2IntMap uiWindows = new Long2IntOpenHashMap();
 
     public static RadioPlugin getInstance() {
@@ -181,7 +183,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void onPlayerLocallyInitialized(PlayerLocallyInitializedEvent event) {
         if (this.autoplay) {
             final Player player = event.getPlayer();
-            this.getServer().getScheduler().scheduleDelayedTask(() -> {
+            this.getServer().getScheduler().scheduleDelayedTask(this, () -> {
                 if (this.worldRadios.containsKey(player.getLevel().getName())) {
                     this.worldRadios.get(player.getLevel().getName()).addListener(player);
                 } else {
@@ -195,6 +197,9 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void onPlayerLevelChange(EntityLevelChangeEvent event) {
         if (event.getEntity() instanceof Player) {
             Player player = (Player) event.getEntity();
+            if (!this.playSetting.getOrDefault(player, true)) {
+                return;
+            }
             if (this.worldRadios.containsKey(event.getOrigin().getName())) {
                 this.worldRadios.get(event.getOrigin().getName()).removeListener(player);
             }
@@ -212,6 +217,7 @@ public class RadioPlugin extends PluginBase implements Listener {
         Player player = event.getPlayer();
         this.global.removeListener(player);
         this.worldRadios.values().forEach(radio -> radio.removeListener(player));
+        this.playSetting.remove(player);
         this.uiWindows.remove(player.getId());
     }
 
@@ -230,10 +236,16 @@ public class RadioPlugin extends PluginBase implements Listener {
                             FormResponseCustom customResponse = (FormResponseCustom) response;
                             Object enable = customResponse.getResponse(1);
                             if (enable instanceof Boolean) {
-                                if ((Boolean) enable) {
-                                    this.global.addListener(player);
+                                Boolean b = (Boolean) enable;
+                                this.playSetting.put(player, b);
+                                IRadio radio = this.worldRadios.get(player.getLevel().getName());
+                                if (radio == null) {
+                                    radio = this.global;
+                                }
+                                if (b) {
+                                    radio.addListener(player);
                                 } else {
-                                    this.global.removeListener(player);
+                                    radio.removeListener(player);
                                 }
                             }
 
@@ -248,7 +260,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void showUI(Player player) {
         this.uiWindows.put(player.getId(), player.showFormWindow(new FormWindowCustom("Radio Manager", Arrays.asList(
                 new ElementLabel("Radio Community Edition"), // 0
-                new ElementToggle("Global Radio", this.global.isListened(player)) // 1
+                new ElementToggle("Global Radio", this.playSetting.getOrDefault(player, true)) // 1
         ))));
     }
 
