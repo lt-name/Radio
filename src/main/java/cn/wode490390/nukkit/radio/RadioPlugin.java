@@ -227,7 +227,9 @@ public class RadioPlugin extends PluginBase implements Listener {
         this.global.removeListener(player);
         this.worldRadios.values().forEach(radio -> radio.removeListener(player));
         PlayerSetting remove = this.playSetting.remove(player);
-        remove.save();
+        if (remove != null) {
+            remove.save();
+        }
         this.uiWindows.remove(player.getId());
     }
 
