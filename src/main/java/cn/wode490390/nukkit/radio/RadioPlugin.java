@@ -5,6 +5,7 @@ import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.entity.EntityLevelChangeEvent;
 import cn.nukkit.event.player.PlayerFormRespondedEvent;
+import cn.nukkit.event.player.PlayerJoinEvent;
 import cn.nukkit.event.player.PlayerLocallyInitializedEvent;
 import cn.nukkit.event.player.PlayerQuitEvent;
 import cn.nukkit.form.element.ElementLabel;
@@ -22,6 +23,7 @@ import cn.wode490390.nukkit.radio.command.RadioCommand;
 import cn.wode490390.nukkit.radio.resourcepack.MusicResourcePack;
 import cn.wode490390.nukkit.radio.resourcepack.MusicResourcePackLoader;
 import cn.wode490390.nukkit.radio.util.MetricsLite;
+import cn.wode490390.nukkit.radio.util.PlayerSetting;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
@@ -49,7 +51,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     private final IRadio global = new Radio();
     private final Map<String, IRadio> worldRadios = new HashMap<>();
 
-    private final Map<Player, Boolean> playSetting = new HashMap<>();
+    private final Map<Player, PlayerSetting> playSetting = new HashMap<>();
 
     private final Long2IntMap uiWindows = new Long2IntOpenHashMap();
 
@@ -181,7 +183,7 @@ public class RadioPlugin extends PluginBase implements Listener {
 
     @EventHandler
     public void onPlayerLocallyInitialized(PlayerLocallyInitializedEvent event) {
-        if (this.autoplay) {
+        if (this.autoplay && this.playSetting.get(event.getPlayer()).isEnabled()) {
             final Player player = event.getPlayer();
             this.getServer().getScheduler().scheduleDelayedTask(this, () -> {
                 if (this.worldRadios.containsKey(player.getLevel().getName())) {
@@ -197,7 +199,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void onPlayerLevelChange(EntityLevelChangeEvent event) {
         if (event.getEntity() instanceof Player) {
             Player player = (Player) event.getEntity();
-            if (!this.playSetting.getOrDefault(player, true)) {
+            if (!this.autoplay && !this.playSetting.get(player).isEnabled()) {
                 return;
             }
             if (this.worldRadios.containsKey(event.getOrigin().getName())) {
@@ -213,11 +215,19 @@ public class RadioPlugin extends PluginBase implements Listener {
     }
 
     @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        Config config = new Config(this.getDataFolder() + "/PlayerSetting/" + player.getName() + ".yml", Config.YAML);
+        this.playSetting.put(player, new PlayerSetting(player.getName(), config));
+    }
+
+    @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         this.global.removeListener(player);
         this.worldRadios.values().forEach(radio -> radio.removeListener(player));
-        this.playSetting.remove(player);
+        PlayerSetting remove = this.playSetting.remove(player);
+        remove.save();
         this.uiWindows.remove(player.getId());
     }
 
@@ -237,7 +247,8 @@ public class RadioPlugin extends PluginBase implements Listener {
                             Object enable = customResponse.getResponse(1);
                             if (enable instanceof Boolean) {
                                 Boolean b = (Boolean) enable;
-                                this.playSetting.put(player, b);
+                                PlayerSetting playerSetting = this.playSetting.get(player);
+                                playerSetting.setEnabled(b);
                                 IRadio radio = this.worldRadios.get(player.getLevel().getName());
                                 if (radio == null) {
                                     radio = this.global;
@@ -260,7 +271,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void showUI(Player player) {
         this.uiWindows.put(player.getId(), player.showFormWindow(new FormWindowCustom("Radio Manager", Arrays.asList(
                 new ElementLabel("Radio Community Edition"), // 0
-                new ElementToggle("Global Radio", this.playSetting.getOrDefault(player, true)) // 1
+                new ElementToggle("Global Radio", this.playSetting.get(player).isEnabled()) // 1
         ))));
     }
 
