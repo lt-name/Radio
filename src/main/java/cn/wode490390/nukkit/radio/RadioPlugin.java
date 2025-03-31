@@ -199,7 +199,7 @@ public class RadioPlugin extends PluginBase implements Listener {
     public void onPlayerLevelChange(EntityLevelChangeEvent event) {
         if (event.getEntity() instanceof Player) {
             Player player = (Player) event.getEntity();
-            if (!this.autoplay && !this.playSetting.get(player).isEnabled()) {
+            if (!this.autoplay || !this.playSetting.get(player).isEnabled()) {
                 return;
             }
             if (this.worldRadios.containsKey(event.getOrigin().getName())) {
